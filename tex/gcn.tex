@@ -66,13 +66,21 @@ Finally, we use the MLE as the loss function to compare the graph representation
 \subsection{Data Generation}
 \textbf{Generating Operator Embedding}
 In word embedding, because the words in a sentence have certain correlation with its context words, 
-therefore the cost function of training Word Embedding is to maximum the joint probability of the word and its context words. 
-Similarly, we can also reasonably assume that the operators that appear in a same logical plan have more association and use the same cost function. 
+the cost function of training Word Embedding is to maximum the joint probability of the word and its context words. 
+Similarly, we can also reasonably assume that the operators that appear in a same logical plan have certain correlation and use the same cost function. 
 We take the topological-ordered logical plan as the sentence and the logical operators inside are words, 
 then use the same model to train the operator embedding. The results are shown in Figure xx. 
 For the sake of visualization, we just show the top-2 dimensions with the highest eigenvalue. 
 One observation is that operators that are the same computing paradigm and have the same number of inputs and outputs tend to have small cosine distance. 
 What's more, the newly inserted Flatmap operator is also mapped closer to the Map operator instead of the Matmul operator which is probably due to the same reason.
+
+% TODO: 图之后再调整
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\linewidth]{figures/embedding_visual.pdf}
+    \caption{Resulting Operator Embedding}
+    \label{fig:embedding_panel}
+\end{figure}
 
 It's important to emphasize that the operator embedding technique is not bound with CLIC but a general feature extraction method. 
 One can generate an operator embedding whether the operator is supported by CLIC or not as long as there are logical plans that contain this operator.
