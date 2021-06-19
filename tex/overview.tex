@@ -2,9 +2,56 @@
 \section{CLIC Overview}
 
 \subsection{The Architecture of CLIC}
-CLIC is a highly extensible cloud-native framework for cross-platform computing. Below we discuss CLIC's main features.
 
-\textbf{Platform-agnostic Programming}   We thin wrap each integrated platform's API to offer a logical operator set and provide various data models like the vector/matrix used in linear algebra. The logical operator describes only the computation semantics like functionality, parameter list, etc. instead of any platform's grammar. User can build platform-agnostic workflow using the logical operator set and data models, and run it on any (integrated) platform. This greatly alleviates users burden of struggling in the overwhelming platforms.
+To address the above challenges in cross-platform computing, CLIC is designed as a cloud-native framework with a Graphic Convolutional Network (GCN) model for hardware-conscious platform selection.
+Figure~\ref{fig:architecture} demonstrates the architecture of CLIC, which consists of three layers. 
+
+
+
+\begin{figure}[tbh]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/CLIC-arch-2.pdf}
+  \caption{The architecture of CLIC}
+  \label{fig:architecture}
+\end{figure}
+
+\textbf{1) Abstraction} CLIC provides a high level abstraction of a workflow, which uses platform independent logical operators to express the computation tasks in the workflow. A logical operator is a baisc functional unit, that describes only the computation semantics like functionality, parameter list, etc.. 
+After hardware-conscious platform selection that aims at optimizing the overall workflow efficiency, each logical operator is assigned with a data processing platform and becomes a physical operator. 
+Since different platforms CLIC supports data models of the corresponding platforms and provides data transfer operators that automatically match the input and output data formats of adjacent operators.
+By assigning operator platforms, adding model translaters, and merging adjacent nodes of the same platform as one job, CLIC reconstructs the logical workflow as a physical workflow.
+To facilitate development, CLIC provides a set of logical operators and corresponding implementations in mulitple corresponding data processing platforms.
+Developers and data scientists can directly utilize these operators to construct their workflow, while new operators and platforms can also be flexibily integrated.
+
+
+***data model conversion operator?***
+ 
+\textbf{2. Service-Based Framework} To fully utilize features of cloud, CLIC embrace microservices, where each functional module is designed as a microservice, such as Executor, Scheduler, and Optimizer.
+Microservices enable flexibility where each module can be devleoped, tested and deployed independently.
+Specifically, domain specific functionalities such as optimizers can be developed with its own data storage and programming platform, which makes the system highly extensible to integrate new optimization schemes.
+The CLIC server consists of a publish/subscribe mode event bus. All the microservices interact with each other by publishing and subscribing to a specific channel in the event bus. The main microservices are as follows.
+
+The main microservices are as follows. a) \textit{API Server} receives the API call from clients and responds to it whenver the result is ready. For example, when receiving a configuration lookup request, it publishs the event to the specific channel and starts to listen. After receiving the result ready event, it wraps the result with headers and responses to the client. At last, we use redis database to cache some of the query result to speed up the process.
+b) \textit{PSelector} takes a logical plan as input and outputs a physical plan whose operator is assigned a platform. Inside the PSelector, it utilizes the prementioned GNN model to determine the platform. We detailedly describe the approach in Section 4. Thanks to the microservice architecture, the model can be easily updated or replaced at runtime. c) \textit{Scheduler} records the status of all resources and specifies the number of container instances and the targeted nodes to be deployed etc.. The resource status are periodically retreived from Executor and maintained in the Scheduler's database. Again different scheduling policies can be developed as independent microservices and deployed according to requirements.
+d) \textit{Executor} controls the underlying container resources using the Kubernetes API and submits the jobs to them. The controlment includs instantiating, pausing, destroying the container and restarting jobs whenever it fails. All the platform-related configuration files like container and network are declared in the form of YAML and managed by Helm~\cite{} charts and passed to the deployed platforms in execution.
+The four core components of CLIC are developed and deployed independently, making CLIC a flexible system with high availability.
+
+
+
+\textbf{3. Cloud-Native Task Deployment} Besides designing the cloud-native framework, CLIC decouple data processing platforms from the framework to facilitate extensible platform integration and independent deployment.
+In this way, all physical operators of a platform are built as a container image, thus each platform is developed and maintained independently.
+Moreover, one platform of different versions can be kept as separate images to provide backward compatibility.
+
+After platform selection, each task in a workflow is associated with an image of its corresponding platform.
+CLIC merges adjacent tasks of the same platform to optimize data transfer costs, and tasks of different platforms are launched as separate instances.
+To execute one or multiple adjacent physical operator, a platform image contains a driver program to drive the workflow execution. In the deployment of a platform image, Executor passes the operators information to the driver program who interprets and calls the corresponding operators one by one.
+
+
+
+
+
+
+\iffalse
+\textbf{Platform-agnostic Programming}   We thin wrap each integrated platform's API to offer a logical operator set and provide various data models like the vector/matrix in linear algebra. The logical operator describes only the computation semantics like functionality, parameter list, etc.. User can build platform-agnostic workflow using the logical operator set and data models, and run it on any (integrated) platform. This greatly alleviates users burden of struggling in the overwhelming platforms.
 
 \textbf{Cross-platform Computing}     To support building the cross-platform workflow, we (i)offer corresponding logical operator sets and data models for different computing paradigms, and (ii)implement a series of data model conversion and data transmission operators to bridge operators from two paradigm. For example, to support both relational and linear algebra we first provide relational operators along with its table model as well as linear operators along with its vector/matrix models, and then implement a conversion operator that assigns each column a name(column number) and a data type to transform a matirx to table.
 
@@ -14,10 +61,10 @@ CLIC is a highly extensible cloud-native framework for cross-platform computing.
 
 \textbf{Agile Integration}   We containerized each platform along with its neccessary components like the above progress reportor, so that dependency management and environment setup should be a lot easier. What's more, we apply semantic versioning on the integrated platforms to avoid conflicts like expired API call after iterate updates. Apart from that, thanks to the feature extraction method, the GNN-model doesn't need to be retrained whenver there's a newly operator/platform anymore, i.e. is compatible for an integration.
 
-\subsection{CLIC Architecture} 
+%\subsection{CLIC Architecture} 
 Figure \ref{fig:architecture} demonstrates the architecture of CLIC that consists of the clients(left), the CLIC server(right top), and 3rd-party services.
 
-\textbf{Client}  There're two types of clients for different roles: user and developer. The user programmes the workflow using clients like native lanuage API, Web interface or command line. The user client wraps the workflow with headers and sends to the CLIC server for execution. The developer client is a developer toolkit for registering configuration, observe and manage the cluser, etc.
+\textbf{Client}  There're two types of clients for different roles: user and developer. The user programmes the workflow using clients like native lanuage API, Web interface or command line. The user client wraps the workflow with headers and sends to the CLIC API server for execution. The developer client is a developer toolkit for registering configuration, observe and manage the cluser, etc.
 
 The CLIC server consists of a series of microservices and a publish/subscribe mode event bus. All the microservices interact with each other by publishing and subscribing to a specific channel in the event bus. The main microservices are as follows:
 
@@ -28,6 +75,7 @@ The CLIC server consists of a series of microservices and a publish/subscribe mo
 \textbf{Scheduler}   The Scheduler specifies the number of container instances, target nodes etc. given the current resource utilization. The resource status are periodically retreived from Executor and maintained in the Scheduler's database.
 
 \textbf{Executor}    The Executor controls the underlying container resources using the Kubernetes API and submits the jobs to them. The controlment includs instantiating, pausing, destroying the container and restarting jobs whenever it fails. All the platform-related configuration files like container and network are declared in the form of YAML and managed by Helm charts.
+\fi
 
 % We propose CLIC, a highly extensible cloud-native framework for cross-platform computing. To address the above challenges, we decouple data processing platforms from the underlying framework to facilitate independent development and deployment.
 % CLIC divides a workflow into multiple \textit{tasks} where adjacent tasks belong to different platforms and are launched as separate instances.
@@ -40,13 +88,6 @@ The CLIC server consists of a series of microservices and a publish/subscribe mo
 
 
 
-
-\begin{figure}[tbh]
-  \centering
-  \includegraphics[width=0.8\linewidth]{figures/CLIC-arch-2.pdf}
-  \caption{The architecture of CLIC}
-  \label{fig:architecture}
-\end{figure}
 
 \iffalse
 Figure \ref{fig:architecture} demonstrates the architecture of CLIC, which consists of four major microservices, i.e., PlanBuilder, Optimizer, PSelector, and Scheduler. PlanBuilder provides the information of logical operators to build the \textit{logical plan} of a workflow (step 1). The logical plan is sent to Optimizer for potential optimizations, and then sent to PSelector to assign platforms by mapping \textit{logical operators} to \textit{physical operators} with a GCN model (step 2). The output of PSelector is the \textit{physical plan}, which is used by Scheduler to deploy corresponding tasks on the cloud. 
