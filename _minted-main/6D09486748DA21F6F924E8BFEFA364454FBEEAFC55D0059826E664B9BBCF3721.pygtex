@@ -1,0 +1,11 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{source1} \PYG{o}{=} \PYG{n}{read}\PYG{p}{(}\PYG{l+s+s1}{\PYGZsq{}BBC\PYGZhy{}News.txt’)}
+\PYG{n}{source2} \PYG{o}{=} \PYG{n}{read}\PYG{p}{(}\PYG{l+s+s1}{\PYGZsq{}Hamlet.txt\PYGZsq{}}\PYG{p}{)}
+\PYG{n}{corpus} \PYG{o}{=} \PYG{n}{join}\PYG{p}{(}\PYG{n}{clean\PYGZus{}source1}\PYG{p}{,} \PYG{n}{clean\PYGZus{}source2}\PYG{p}{)}
+
+\PYG{n}{word\PYGZus{}embedding} \PYG{o}{=} \PYG{n}{toMatrix}\PYG{p}{(}\PYG{n}{clean\PYGZus{}corpus}\PYG{p}{,} \PYG{n}{Word2Vec}\PYG{p}{)}
+
+\PYG{n}{model} \PYG{o}{=} \PYG{n}{Model}\PYG{p}{(}\PYG{l+s+s1}{\PYGZsq{}LSTM\PYGZsq{}}\PYG{p}{)}
+\PYG{n}{train}\PYG{p}{(}\PYG{n}{model}\PYG{p}{,} \PYG{n}{word\PYGZus{}embedding}\PYG{p}{[}\PYG{l+s+s1}{\PYGZsq{}train\PYGZsq{}}\PYG{p}{])}
+\PYG{n}{topic} \PYG{o}{=} \PYG{n}{test}\PYG{p}{(}\PYG{n}{model}\PYG{p}{,} \PYG{n}{word\PYGZus{}embedding}\PYG{p}{[}\PYG{l+s+s1}{\PYGZsq{}test\PYGZsq{}}\PYG{p}{])}
+\end{Verbatim}

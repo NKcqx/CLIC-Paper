@@ -1,0 +1,87 @@
+\section{SYSTEM DESIGN AND IMPLEMENTATION}
+In this section, we describe the design and implementation of CLIC, including the support for agile platform integration, environment management, and the supports for developing cross-platform work- flows. 
+The prototype of CLIC is built on Kubernetes, with the mod- ules and tasks running in Docker containers.
+
+\subsection{Operator Mapping and Management}
+CLIC provides a logical operator set that is a union of operators from multiple domains. 
+For instance, the batch processing operator subset consists of MAP, FLATMAP, SORT, FILTER, etc., 
+and the linear algebra subset consists of DOT PRODUCT, MULTIPLY, TRANSPOSE, and so on. 
+A logical operator describes the operator name, input parameters, return value, algebra type, and related optimizing information. 
+The information of all operators is stored in a configuration server and provided to developers by PlanBuilder. 
+A physical operator contains information including the name of the physical function and data types on the platform. 
+Each logical operator needs to be mapped to a physical operator for execution, i.e., assigning a platform to an operator.
+
+\begin{center}
+    \begin{tabular}{ c c c }
+        Logical Operator & Platform & Physical Operator \\
+        \multirow{3}{2em}{PCA} & Tensorflow & pca() \\
+        %  & PyTorch & low_rank() \\
+        %  & Spark ML & PCA() \\
+        \multirow{2}{4em}{Map} & Spark & map() \\
+         & JavaStream  & map() \\
+        \multirow{3}{4em}{Word2Vec} & PyTorch & Word2Vec() \\
+         & Spark ML & Word2Vev() \\
+         & Gensim & Word2Vec() \\
+    \end{tabular}
+\end{center}
+
+According to the workflow and workload, different physical operators can be chosen for deployment. 
+We maintain an operator mapping table that contains one-to-many mappings between logical operators and physical operators. 
+Table 1 exemplifies the mappings of three logical operators, i.e., PCA, Map, and Word2Vec. 
+As listed in the table, Map has the implementation on Spark and JavaStream, while PCA and Word2Vec can be mapped to machine learning platforms including PyTorch and Tensorflow. 
+When a logical operator does not have an equivalent native implementation on a platform, developers can implement it and update the mapping table, such as the customized Word2Vec operator in PyTorch. 
+In the configuration server, the operator mapping table is maintained with the support for insert, delete, and replace operations.
+
+\subsection{Image Management}
+CLIC facilitates the integration of new platforms by maintaining them as images. 
+The metadata of each image is stored in the image table on the configuration server, including Dockerfile, platform version, entry-point, and all available physical operators. 
+In the image table, images of the same platform are stored together, and each image contains the platform of a different version. 
+With the physical plan of a workflow being split into tasks on different platforms, a proper image is located and used for each task. 
+When there exists different versions of the same image, the latest version that contains the required physical operators is selected.
+
+To integrate a new platform, the image needs to be built with the corresponding information being updated in the image table.
+If a new operator of a platform is developed, besides rebuilding the image and updating its information in the image table, 
+the information of the new operator also needs to be updated in the operator mapping table.
+
+
+\subsection{Supports for Building Cross-Platform Workflows}
+Building a cross-platform data science workflow demands a set of functionalities and supports. 
+In this section, we introduce the data model conversion, UDF passing and dynamic control flows in CLIC.
+
+
+\textbf{Data Model Conversion} 
+There can be significant differences between data models of different platforms.
+For example, an array’s dimensions implicitly order cells while is different from a Table (SQL tuples) [34]; 
+The graph model can perform better on relationship queries than the Table due to the inherent structural differences [27, 31]. 
+These differences make it hard to construct a unified data model that can be used by all operators. 
+Therefore, we bridge the gaps between data models by implementing a series of model conversion algorithms. 
+The toMatrix operator in line 5 of Listing 1 is one of the conversion algorithms that converts a concrete word to a dense vector using the skip-gram [29] algorithm. 
+Note that we provide essential conversion algorithms in our model conversion library, such as the skip-gram, and expose interfaces to develop conversions concerning business logic.
+
+\textbf{UDF}  Due to the decoupled architecture, a user-defined function (UDF) is passed to a platform driver through RPCs. 
+In CLIC, a UDF instance is firstly serialized and embedded in the logical plan by the Planbuilder. 
+It is deserialized by the Executor inside the underlying platform to drive the execution. 
+One tricky problem is when the UDF is implemented in a different lanugage with the underlying platform. 
+CLIC currently supports translating UDFs between Python and Java using a 3rd-party tool.
+
+\textbf{Dynamic Control Flow} We introduce control flow operators including SWITCH, NEXT ITERATION, and EXIT to help build workflows with iterations. 
+The SWITCH primitive takes an if-statement as the input parameter, initial iteration flag values as input data, and returns a boolean value that directs the executor. 
+The NEXT ITERATION operator takes iteration flags as input data and forwards them to the head of the next iteration block, e.g. SWITCH operator. 
+EXIT operator indicates the end of an iteration and connects to the next operator in the workflow.
+A simple workflow with iteration is shown in Figure 5 where $i$ is the iteration flag, $i < 10$ is the if-statement, and Map operator is the iteration body.
+
+\subsection{Optimizing Logical Plan}
+Optimizing the logical plan of a workflow can bring notable performance improvement [17, 22].
+In CLIC, we implement optimizers as microservices, and two currently supported optimizers are illustrated as follows.
+
+\textbf{Align Layout}
+Access patterns (row-, column-, or block-wise) of linear algebra operators can significantly impact ML workflow performance [39]. 
+For example, the matrix multiplication operator access the left matrix in a row-wise pattern and access the right matrix in a column-wise pattern. 
+Changing the sparse matrix layout to match the access pattern can significantly improve the performance [25]. 
+CLIC identifies the pattern of the sparse matrix multiplication and implicitly inserts a layout conversion operator.
+
+\textbf{Broadcast}
+Some binary operations like JOIN and MATRIX MULTIPLY need to frequently send data batches between nodes when input data is distributed stored. 
+However, when one of the data is small enough to fit in memory, such as multiplying a matrix with a vector or joining a big table with a tiny one, the coordinating overheads can be eschewed by broadcasting the small one to all nodes so that they can be computed locally [8, 26].
+CLIC identifies this pattern and implicitly inserts the BROADCAST operator.
+
