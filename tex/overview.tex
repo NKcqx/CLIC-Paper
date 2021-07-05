@@ -3,8 +3,13 @@
 
 \subsection{The Architecture of CLIC}
 
-To address the above challenges in cross-platform computing, CLIC is designed as a cloud-native framework with a Graphic Convolutional Network (GCN) model for hardware-conscious platform selection.
-Figure~\ref{fig:architecture} demonstrates the architecture of CLIC, which consists of three layers. 
+To address the above challenges in cross-platform computing, CLIC is designed as a cloud-native system with the major components running as multiple decoupled microservices and platform tasks running as separate jobs on the cloud.
+CLIC formulates the platform selection as a classification problem and takes the input workflow as a graph, 
+where Graphic Convolutional Network (GCN) is adopted for platform selection.
+For the flexibility of expanding the fast growing platforms, the GCN model is made adaptive to new platforms without retraining the model.
+Moreover, the model is designed as hardware-conscious to predict workflows with different computing resources.
+All the aspects make CLIC a cloud native system that utilizes cloud environments to make it fault tolerant, flexible, scalable and adaptive.
+Figure~\ref{fig:architecture} demonstrates the architecture of CLIC, which consists of three major components. 
 
 
 
@@ -15,36 +20,53 @@ Figure~\ref{fig:architecture} demonstrates the architecture of CLIC, which consi
   \label{fig:architecture}
 \end{figure}
 
-\textbf{1) Abstraction} CLIC provides a high level abstraction of a workflow, which uses platform independent logical operators to express the computation tasks in the workflow. A logical operator is a baisc functional unit, that describes only the computation semantics like functionality, parameter list, etc.. 
-After hardware-conscious platform selection that aims at optimizing the overall workflow efficiency, each logical operator is assigned with a data processing platform and becomes a physical operator. 
-Since different platforms CLIC supports data models of the corresponding platforms and provides data transfer operators that automatically match the input and output data formats of adjacent operators.
-By assigning operator platforms, adding model translaters, and merging adjacent nodes of the same platform as one job, CLIC reconstructs the logical workflow as a physical workflow.
-To facilitate development, CLIC provides a set of logical operators and corresponding implementations in mulitple corresponding data processing platforms.
-Developers and data scientists can directly utilize these operators to construct their workflow, while new operators and platforms can also be flexibily integrated.
+\textbf{Abstraction} CLIC provides a high level abstraction of a workflow, which uses platform-independent logical operators to express the computing tasks in it. 
+A logical operator represents a basic computational task, such as data filtering or a K-Nearest-Neighbor(KNN) algorithm, which is platform-independent and only describe the computational semantics like functionality, parameter list, input/output data format.
+The implementation of a logical operator on a speicific platform is called as a physical operator.
+There is a 1-N (N $\ge$ 1) mapping between a logical operator and physical operators, which means a logical operator can be implemented on multiple data processing platform.
+With a hardware-conscious GCN platform selection algorithm that optimizes overall workflow efficiency, each logical operator in a workflow is assigned with a data processing platform and becomes a physical operator.
+
+Since platforms may have different data models, e.g., table, matrix/vector and graph, CLIC provides a set of data model transformation operators that developers can directly use to convert data models.
+Besides that, a data model may have various data formats, such as a table can be row-based or column-based while the format a matrix can be block-partitioned or row-partitioned.
+There exists no uniform data formats because the efficiency is dramatically diverse depending on computation patterns.
+CLIC also provides a set of \textit{data source} and \textit{data sink} operators to deal with the data formats. A data sink operator serializes the data of a platform and write to file system with a specific data format, and a data source operator reads and deserializes data from files and converts to the desired formats for the following computing operators. Therefore, a data sink and a data source generally appear in pairs so that only one data format transformation is performed. 
+By assigning operator platforms, merging adjacent nodes of the same platform as one job, and adding data source and data sink operators, CLIC reconstructs the logical workflow as a physical workflow for deployment.
 
 
-***data model conversion operator?***
+***1）此处应该有个例子作说明，2）我们这个为什么叫data model transfer，这本身就是operator的一部分***
  
-\textbf{2. Service-Based Framework} To fully utilize features of cloud, CLIC embrace microservices, where each functional module is designed as a microservice, such as Executor, Scheduler, and Optimizer.
+\textbf{Service-Based Framework} To utilize the flexibility, failure recovery, and scalability of cloud, CLIC embraces microservices in the architecture, where each functional module is designed as a microservice, including API Gateway, Executor, Scheduler, and PSelector.
 Microservices enable flexibility where each module can be devleoped, tested and deployed independently.
-Specifically, domain specific functionalities such as optimizers can be developed with its own data storage and programming platform, which makes the system highly extensible to integrate new optimization schemes.
-The CLIC server consists of a publish/subscribe mode event bus. All the microservices interact with each other by publishing and subscribing to a specific channel in the event bus. The main microservices are as follows.
+Specifically, domain specific functionalities such as the scheduling scheme can be developed with independent data storage, programming language and platforms, making the system highly flexible and extensible to integrate new schemes at runtime.
+As shown in the figure, the CLIC server consists of a publish/subscribe mode event bus. All the microservices interact with each other by publishing and subscribing to a specific channel in the event bus.
 
-The main microservices are as follows. a) \textit{API Server} receives the API call from clients and responds to it whenver the result is ready. For example, when receiving a configuration lookup request, it publishs the event to the specific channel and starts to listen. After receiving the result ready event, it wraps the result with headers and responses to the client. At last, we use redis database to cache some of the query result to speed up the process.
-b) \textit{PSelector} takes a logical plan as input and outputs a physical plan whose operator is assigned a platform. Inside the PSelector, it utilizes the prementioned GNN model to determine the platform. We detailedly describe the approach in Section 4. Thanks to the microservice architecture, the model can be easily updated or replaced at runtime. c) \textit{Scheduler} records the status of all resources and specifies the number of container instances and the targeted nodes to be deployed etc.. The resource status are periodically retreived from Executor and maintained in the Scheduler's database. Again different scheduling policies can be developed as independent microservices and deployed according to requirements.
-d) \textit{Executor} controls the underlying container resources using the Kubernetes API and submits the jobs to them. The controlment includs instantiating, pausing, destroying the container and restarting jobs whenever it fails. All the platform-related configuration files like container and network are declared in the form of YAML and managed by Helm~\cite{} charts and passed to the deployed platforms in execution.
+The main microservices in CLIC are as follows. a) \textit{API Server} receives API calls from clients and responds to it whenver the result is ready. 
+For example, when receiving a configuration lookup request, API Server publishs the event to the specific channel and starts to listen. 
+After configuration microservice responds and API server receives the result ready event, it wraps the result with headers and responses to the client. 
+In this microservice, in-memory key-value stores is used to cache query results to speed up the process.
+b) \textit{PSelector} takes a logical plan as input and outputs a physical plan with each operator being assigned with a platform. Inside the PSelector, it utilizes a GNN model to predict platforms. 
+We detailedly describe the approach in Section 4.  
+c) \textit{Scheduler} records the status of all resources and specifies the number of container instances and the targeted nodes to be deployed etc.. 
+The resource status are periodically retreived from Executor and maintained in the Scheduler's database. 
+With the microservice architecture, different scheduling policies can be developed as independent microservices and deployed according to requirements of production systems.
+d) \textit{Executor} controls the underlying container resources using the Kubernetes API and submits jobs for execution. The controlment includs instantiating, pausing, destroying the container and restarting jobs whenever it fails. All the platform-related configuration files like container and network are declared in the form of YAML and managed by Helm~\cite{} charts and passed to the deployed platforms in execution.
 The four core components of CLIC are developed and deployed independently, making CLIC a flexible system with high availability.
 
 
 
-\textbf{3. Cloud-Native Task Deployment} Besides designing the cloud-native framework, CLIC decouple data processing platforms from the framework to facilitate extensible platform integration and independent deployment.
-In this way, all physical operators of a platform are built as a container image, thus each platform is developed and maintained independently.
-Moreover, one platform of different versions can be kept as separate images to provide backward compatibility.
+\textbf{Cloud-Native Task Deployment} Besides designing the cloud-native framework, CLIC decouples data processing platforms from the framework to facilitate extensible platform integration and independent deployment.
+All physical operators of a platform are built in an image, thus each platform is developed and maintained independently.
+Moreover, one platform of different versions are kept as separate images to provide backward compatibility.
 
-After platform selection, each task in a workflow is associated with an image of its corresponding platform.
-CLIC merges adjacent tasks of the same platform to optimize data transfer costs, and tasks of different platforms are launched as separate instances.
-To execute one or multiple adjacent physical operator, a platform image contains a driver program to drive the workflow execution. In the deployment of a platform image, Executor passes the operators information to the driver program who interprets and calls the corresponding operators one by one.
+To mitigate expensive data transfer between operators, the input and output of an operator is an abstraction of the platform (e.g., RDD or numpy.array) or a specific data structure (int [] in C).
+In this way, when adjacent tasks belong to the same platform, they can be merged and deployed as one job.
+Instead, tasks of different platforms are launched as separate jobs and passes data through a file system.
+After platform selection, each task in a workflow is assigned with an image of its corresponding platform.
 
+To execute physical operators in one job, a platform image contains a driver program to drive the workflow execution. 
+In the deployment of a job, Executor passes the operators information of the job to the driver program in the platform image. 
+The driver program calls the specified data source operator to read data from the file system and transfers into the input abstraction and formats of operators, such as building an RDD. Then driver program interprets the workflow, calls the corresponding operators and passes data one by one. In the end, the driver program calls the data sink operator to serialize data and write to specified directory in the file system.
+Overall, CLIC merges and deploys operators of the same platform as one task while automatically connecting adjacent platforms with automatic data transformation. 
 
 
 
