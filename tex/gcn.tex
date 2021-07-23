@@ -2,64 +2,92 @@
 \section{Selecting Platforms in CLIC}
 
 
-The platform selection is to find the platform with the lowest cost for each logical operator in the logical plan. 
-We take this problem as a node classification problem, where the platform of the lowest cost is considered as the label of the logical operator. 
-We use the GCN as the classifier, which is considered more suitable for node classification problems. 
-Below we first narrate the feature extraction method used in CLIC and then describe the classification method using GCN.
-
-
-\subsection{Problem Definition}
-In CLIC, a logical plan is organized in the form of DAG. 
-We define the DAG as  $G = (V, E)$ where $V$ denotes the logical operator and $E$ denotes the operator dependency.
-Our goal is to select the best platform for each logical operator that can achieve the best performance of a workflow. 
-We treat the best platform of a logical operator as its label that is decided by the logical plan structure, workload, hardware resources, etc., 
-in this way, our goal then becomes classifying a label for each operator in a logical plan, which is a typical node classification problem [].
-
-Such problems with topology as input are usually solved with the Graph Nerual Network(GNN). 
-Among many GNNs, the Graph Convolutional Network (GCN) is often used to solve the node classification problems because of its ability to capture neighbor relationships.
-
-\subsection{GCN Intuition}
-
-Graph Convolutional Network is a convolutional neural network that can be directly applied to graphs. 
-It applys the convolution kernel to learn the first-order spectral feature, which are followed by activation functions to learn graph representations[42]. 
-The convolution kernel learns the spectral feature by inspecting neighboring nodes, below we briefly show the GCN mechanism as an example of the logical plan's node classification process, which is shown in Figure \ref{fig:gcn}.
-
-\begin{figure}
-  \centering
-  \includegraphics[width=\linewidth]{figures/gcn.png}
-  \caption{Selecting platforms with GCN}
-  \label{fig:gcn}
-\end{figure}
-
-The input of GCN is a graph with nodes are represented as vectors $\hat{V}$. 
-In order to learn the relationship between the current operator (green node) and its neighbors, it first needs to normalize the irregular topology to the matrix. 
-This is done by selecting the current operator and its K-1 neighbors (blue nodes) to form the K * |V| size matrix. 
-Then the kernel function f(x) = AVG(X) slides across the matrix and generates the resulted vector that is the aggregate of its neighborhood. 
-After that, the vector is fed into the nerual network to learn the node's graph representation. 
-In our classification case, we add a fully-connected layer at the end of the neural network so that the graph representation is transformed into the label's probability distribution immediately. 
-Finally, the one with highest probability is selected as the resulted label.
+In CLIC, a logical plan is organized in the form of DAG where the node denotes the logical operator and the edge denotes the operator dependency.
+The platform selection is to find the best platform for each logical operator in a logical plan to achive the best overall performance.
+We take the best platform as the label of the node, in this way, the selection problem is actually a typical node classification problem.
+Such problems with topology as input are usually solved with the Graph Nerual Network(GNN) that can be directly applied to the graph.. 
+Among many GNNs, GCN is considered better at solving the node classification problem because of its ability of the convolution kernel to capture neighbor relationships.
+Compared with the ML-based approach, GCN avoids the loss of structural information due to the need to encode the topological structure as a vector[];
+One more step before feeding the logical plan into GCN is to vectorize the operator, i.e. the feature extraction step.
+However, as we have disscussed in 2.2, the traditional vectorization method is not suitable for CLIC. 
+Inspired by the word embedding, we propose a novel feature extraction method called the operator embedding and overcome the problem for the first time.
+In 5.1, we give a first look to the the naive encoding approach and discuss its limitations, and then we introduce our novel embedding-based encoding.
+In 5.2, we detailed the process of using GCN to select platforms through an example.
+In 5.3, we introduce the method of synthesizing training data of the operator embedding and the GCN.
 
 \subsection{Feature Extraction}
-
 As it turns out, many Machine Learning algorithms and almost all Deep Learning Architectures are incapable of processing raw form data like plain text or, in this case, the logical operator. 
 They require numbers as inputs to perform any sort of job, be it classification, regression etc. in broad terms. 
-Therefore, the operator needs to be vectorized by feature extraction before fed into GCN.
+Therefore, the operator needs to be encoded as the feature vector before fed into GCN.
 
-Figure xx shows the structure of few sample operator's feature vector. 
-It consists of two segments: the operator encoding and the hardware resources (the right green). 
-The following will introduce the meaning of these two segments.
+When encoding the operator, we consider the following three most influential factors: the operator itself, workload, and hardware resources.
 
-\textbf{Operator Encoding}  
-Operators describe the computation logic of the workflow. 
-Two logical plan with the same topology can produce radically different classification results due to their different operators. 
-Although the first two plans in Figure XX have the same topology, the former is consists of relational operators, which describes the relational algebra over the Table model, and the operators are all classified as the Spark(SQL); 
-While the latter describes a linear algebra over the matrix and the operators are all classified as Tensorflow. 
-Therefore we use the id to distinguish operators and encode the id using the one-hot encoding. 
-The one-hot encoding is used for vectorization of category features, such as gender or id. 
-Its vectorization result is a 0-1 vector as shown in Fig.XX (left blue), whose dimension is the same as the number of categories and only has one non-zero element which is the category of the row.
+\subsubsection{Operator Encoding}
+Operators describe the computation logic of the workflow.
+Two logical plans with the same topology can be different because of their own operators.
+As examplified in Figure \ref{fig:graph-comparison}, although both of the two plans have the same topology,
+\ref{fig:same-graph-sql} describes a SQL query while \ref{fig:same-graph-linear} is a mathmatical calculation.
+As a result, they need to be classified to the different execution engines.
+
+\begin{figure}
+  \subfigure[SQL Query]{
+      \label{fig:same-graph-sql}
+      \includegraphics[width=0.45\linewidth]{figures/same-graph-sql.png}
+  } 
+  \subfigure[Linear Algebra]{
+      \label{fig:same-graph-linear}
+      \includegraphics[width=0.45\linewidth]{figures/same-graph-linear.png}
+  } 
+  \caption{Logical Plan Comparison}
+  \label{fig:graph-comparison}
+\end{figure}
+
+We first follow the traditional approach that using the one-hot encoding to represent the operators.
+\textbf{One-Hot Encoding}
+The one-hot encoding is used for vectorizing the category features, such as gender or id. 
+The vectorization result is a 0-1 vector whose dimension is equal to the number of categories.
+The blue part of the feature vector in Figure \ref{fig:feature-vector-onehot} shows the result of the one-hot encoding. 
+As we can see that, each row only has one non-zero element which indicates the category of the row.
+
+\begin{figure}
+  \subfigure[One-Hot Encoding]{
+      \label{fig:feature-vector-onehot}
+      \includegraphics[width=0.45\linewidth]{figures/feature-vector-onehot.pdf}
+  } 
+  \subfigure[Operator Embedding]{
+      \label{fig:feature-vector-embedding}
+      \includegraphics[width=0.45\linewidth]{figures/feature-vector-embedding.pdf}
+  } 
+  \caption{Operator Feature Vector}
+  \label{fig:feature-vector}
+\end{figure}
+
+One-hot encoding is an simple but effective vectorization method and has been widely adopted. 
+However, it has two prominent limitations that are especially obvious in CLIC:
+
+\begin{itemize}
+  \item 1) Low computational: 
+  The dimension of the one-hot vector is equal to the category amounts and only has one non-zero element.
+  Therefore it usually resulted in a high-dimensional and sparse vector. 
+  Generally speaking, this makes it less computational since the majority of neural network toolkits do not play well with very high-dimensional, sparse vectors [Neural Network Methods in Natural Language Processing, 2017]. 
+  This problem becomes more crucial to a cross-platform framework like CLIC since we already face the insufficiant data problem for a long time.
+  \item 2) Imcompatible to new operator insertion: 
+  In particular, as a new operator been integrated, the dimension of the one-hot vector will grow in the same time. 
+  Figure \ref{fig:feature-vector-onehot} examplified this situation. 
+  When the new Flatmap operator (represented by the dashed line) being inserted, all the vectors are grown to a higher dimension.
+  The consequnce is that the pre-trained model, GCN for example, needs to be retrained because the dimension of the new vector conflicts with the model's input requirement.
+  This problem does not exist in most scenarios, because the dimensions of the input data are usually predefined and will not grow.
+  However, as we have narrated in Section 2, a cross-platform system requires the fast evolution, such as enriching the operator set.
+  Under these circumstances, the dimension of the one-hot vector will vary frequently, which further lead to the frequent model retraining.
+\end{itemize}
+
+In order to overcome the above two limitations, we propose a novel feature extraction method called operator embedding.
+% 为了克服以上两个问题，我们提出了新的使用运算符嵌入（operator embedding）向量化运算符的方式。
+
+\textbf{Operator Embedding}
 
 
-\textbf{Hardware Resources}
+\subsubsection{Hardware Resources}
 Hardware resources, including network bandwidth, GPU memory, SSD/HDD, etc. are also important factors affecting platform classification. 
 For example, the selection of two different communication model used in ML frameworks, i.e. the parameter server model and the all-reduce model, are effected by the bandwidth and the GPU. 
 In general, the parameter server works better if you have a large number of unreliable and not so powerful machine;
@@ -70,38 +98,15 @@ Those features are the same for all operators in a same plan.
 The Figure xx.3 is the classification result of the same plan with the operator platforms are changed from Tensorflow to PyTorch. 
 The reason behind it may be that the network card has been upgraded from 9GBS to 200GBS and the communication model of Tensorflow is set to the parameter server by default, and vice versa for PyTorch. 
 
-\subsection{Training GCN}
-The dataset used for training were logical plans and labels of operators in the plan. 
-The effectiveness of the model depends on the quality of the dataset. 
-Therefore, a large number of logical plans are required first. 
-In order to get the labels of each plan, we also need to actually run all of its possible physical plans with different workloads and infrastructures, and choose the one with the least execution time. 
-But this confronting two chanllenges: 
-i) there lacks sufficient real-world logical plans [] and 
-ii) it's impossible to run all the possible physical plans since it is an exponential search space. 
+\subsubsection{Workload}
+% 数据分布和 selectivity
 
-For the former problem, we used the synthesis way to generate the traning data. 
-We constructe a state machine for each computing paradigm respectively to represent its programming model, and synthesize the actual logical plans using the markov chain. 
 
-For the latter problem, we first prune the search space using the technique in []. 
-And for the last physical plan, we specified the data source and severa; workloads, and run them to get the labels, then we populate the data by interpolation []. 
-At last, we repeate the above steps on variational infrastructures.
 
-We train the GCN model using the above synthesized dataset and Figure xx shows the model accuracy on the collected real-world test set. 
-It can be seen that, the model acquires pretty good result on the single computing paradigm. 
-However, when dealing with the large graph, especially the hybrid graph, the accuracy drops to nearly 50\%, which is unacceptable.
-
-One of the main problem is the one-hot encoding. 
-This encoding method always results in a high-dimensional and sparse vector. 
-Generally speaking, this makes it less computational since the majority of neural network toolkits do not play well with very high-dimensional, sparse vectors [Neural Network Methods in Natural Language Processing, 2017]. 
-The less computational problem is crucial to such a framework since it already faces the insufficiant data problem. 
-
-Another side-effects of the one-hot encoding is that it is imcompatible to a newly integrated operator, which goes against to our high extensible character. 
-In particular, the one-hot encoding needs to increase the dimension of all operator vectors whenver a new one is inserted. 
-Figure xx examplified this situation where as the new Flatmap operator (red one) being inserted, all the vectors' dimension are grown. 
-Thus the previous model needs to be retrained otherwise the new vector becomes an invalid input due to its higher dimension. 
-Even if reserving some empty dimension to stablize the input, the model still cannot properly classify the new operator because the new dimension is orthogonal to the other dimension and the model lacks knowledge about this new dimensions.
-
-In order to overcome the above two problems, we turned our attention to represent the operator using the embedding.
+put it together, we construct the operator's feature vector as 
+Figure xx shows the structure of few sample operator's feature vector. 
+It consists of two segments: the operator encoding and the hardware resources (the right green). 
+The following will introduce the meaning of these two segments.
 
 \subsection{From One-hot Encoding To Embedding}
 In mathmatic, an embedding is a function $f X -> Y$ that maps a data point X in one space to point Y in another space. 
@@ -149,6 +154,63 @@ The resulting Platform Embedding is shown in Figure XX.
 
 Last but not the least, it's important to emphasize that both the operator and platform embedding techniques are not neccessarily bound with CLIC but a general feature extraction method. 
 One can generate an operator embedding whether the operator is supported by CLIC or not as long as there are logical plans that contain this operator.
+
+
+\subsection{GCN Intuition}
+
+Graph Convolutional Network is a convolutional neural network that can be directly applied to graphs. 
+It applys the convolution kernel to learn the first-order spectral feature, which are followed by activation functions to learn graph representations[42]. 
+The convolution kernel learns the spectral feature by inspecting neighboring nodes, below we briefly show the GCN mechanism as an example of the logical plan's node classification process, which is shown in Figure \ref{fig:gcn}.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\linewidth]{figures/GCN-new.pdf}
+  \caption{Selecting platforms with GCN}
+  \label{fig:gcn}
+\end{figure}
+
+The input of GCN is a graph with nodes are represented as vectors $\hat{V}$. 
+In order to learn the relationship between the current operator (green node) and its neighbors, it first needs to normalize the irregular topology to the matrix. 
+This is done by selecting the current operator and its K-1 neighbors (blue nodes) to form the K * |V| size matrix. 
+Then the kernel function f(x) = AVG(X) slides across the matrix and generates the resulted vector that is the aggregate of its neighborhood. 
+After that, the vector is fed into the nerual network to learn the node's graph representation. 
+In our classification case, we add a fully-connected layer at the end of the neural network so that the graph representation is transformed into the label's probability distribution immediately. 
+Finally, the one with highest probability is selected as the resulted label.
+
+
+\subsection{Training GCN}
+The dataset used for training were logical plans and labels of operators in the plan. 
+The effectiveness of the model depends on the quality of the dataset. 
+Therefore, a large number of logical plans are required first. 
+In order to get the labels of each plan, we also need to actually run all of its possible physical plans with different workloads and infrastructures, and choose the one with the least execution time. 
+But this confronting two chanllenges: 
+i) there lacks sufficient real-world logical plans [] and 
+ii) it's impossible to run all the possible physical plans since it is an exponential search space. 
+
+For the former problem, we used the synthesis way to generate the traning data. 
+We construct a state machine for each computing paradigm respectively to represent its programming model, and synthesize the actual logical plans using the markov chain. 
+
+For the latter problem, we first prune the search space using the technique in []. 
+And for the last physical plan, we specified the data source and severa; workloads, and run them to get the labels, then we populate the data by interpolation []. 
+At last, we repeate the above steps on variational infrastructures.
+
+We train the GCN model using the above synthesized dataset and Figure xx shows the model accuracy on the collected real-world test set. 
+It can be seen that, the model acquires pretty good result on the single computing paradigm. 
+However, when dealing with the large graph, especially the hybrid graph, the accuracy drops to nearly 50\%, which is unacceptable.
+
+One of the main problem is the one-hot encoding. 
+This encoding method always results in a high-dimensional and sparse vector. 
+Generally speaking, this makes it less computational since the majority of neural network toolkits do not play well with very high-dimensional, sparse vectors [Neural Network Methods in Natural Language Processing, 2017]. 
+The less computational problem is crucial to such a framework since it already faces the insufficiant data problem. 
+
+Another side-effects of the one-hot encoding is that it is imcompatible to a newly integrated operator, which goes against to our high extensible character. 
+In particular, the one-hot encoding needs to increase the dimension of all operator vectors whenver a new one is inserted. 
+Figure xx examplified this situation where as the new Flatmap operator (red one) being inserted, all the vectors' dimension are grown. 
+Thus the previous model needs to be retrained otherwise the new vector becomes an invalid input due to its higher dimension. 
+Even if reserving some empty dimension to stablize the input, the model still cannot properly classify the new operator because the new dimension is orthogonal to the other dimension and the model lacks knowledge about this new dimensions.
+
+In order to overcome the above two problems, we turned our attention to represent the operator using the embedding.
+
 
 % \begin{figure}
 %     \subfigure[One-Hot Encoding]{
