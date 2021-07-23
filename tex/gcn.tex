@@ -85,6 +85,48 @@ In order to overcome the above two limitations, we propose a novel feature extra
 % 为了克服以上两个问题，我们提出了新的使用运算符嵌入（operator embedding）向量化运算符的方式。
 
 \textbf{Operator Embedding}
+In mathmatic, an embedding is a function $f X -> Y$ that maps a data point X in one space to point Y in another space[wiki]. 
+This is the most important preprocess technique in natural language processing (NLP), where the word embedding is a term used for the representation of words for text analysis. 
+It is typically in the form of a real-valued vector that encodes the meaning of the word such that the words that are closer in the vector space are expected to be similar in meaning [wiki]. 
+For promotion, there also are image embedding, video embedding. 
+A representative algorithm for generating word embedding is the CBOW[], whose idea is that words appearing in the same sentence have higher relevance. 
+The way CBOW works, in a nutshell, is that it tends to maximize the joint probability of a word and its context words in a sentence. 
+Therefore, it requires a large corpus containing enough sentences as the training dateset to learn the word relationships.
+
+% 在CLIC中，出现在一个 logical plan 中的运算符也具有一定的相似性和关联。
+% 举例来说，线性代数会先 load 数据，然后用 locator 选择数据，然后计算，最后是保存数据。
+% 而计算符按输入数据个数分类又有一元运算符如 sin, cos, exp， 和二元运算符如 add, multiply
+Therefore, we can share the same idea in the word embedding that 
+1) allows semantically similar operators to have closer distance. 
+2) maximizes the joint probability of a operator and its neighbor operators in a logical plan
+We can still use the CBOW algorithm.
+We take the topological ordered logical plan as the "sentence", where each operator is a "word" and its neighbors are the "context words". 
+
+The corpus i.e. logical plans, are retreived from our synthesized dataset which will be discussed later in Section xx.
+The structure of the operator embedding is shown in Figure \ref{fig:feature-vector-embedding}. 
+The dimension of the operator embedding is fixed (hyper parameter) and way smaller than that of the one-hot encoding.
+The resulting embeddings trained using our synthesized dataset are visualized in Figure \ref{fig:emb_visual} where we reduce the dimension to the top-2 dimensions with the highest eigenvalue for the sake of visualization. 
+A quick observation is that operators that belong to the same computing paradigm and have the same number of inputs/outputs tend to have closer cosine distance. 
+In another word, we successfully encode the semantical relationship to the low-dimensional operator embedding.
+
+\begin{figure}[tbh]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/embedding_visual.pdf}
+  \caption{Visualization of the trained operator embedding}
+  \label{fig:emb_visual}
+\end{figure}
+
+Since the input operators are only logical, 
+one can generating a operator's embedding whether it is implemented by a framework, say CLIC, or not, 
+as long as they offer enough logical plans that contain the operator.
+Therefore, one important merit we want to emphasize is that, the operator embedding technique is a general feature extraction method that is independent to any computing frameworks.
+
+What this means to CLIC is that, we can construct a rich operator embedding set as a "dictionary" before we actually implement them.
+Every time we integrate a new operator, we look up to the dictionary for its embedding. There are two scenario for getting the embedding:
+\begin{itemize}
+    \item 1) The operator is new to CLIC but not the dictionary. We retreive its embedding directly from the dictionary.
+    \item 2) The operator is "Out-Of-Vocabulary (OOV)". In this case, we need to first synthesize some new logical plans for it according to its attributes (paradigm, \#input/output, etc.), and then retrain all of the embeddings.
+\end{itemize}
 
 
 \subsubsection{Hardware Resources}
@@ -102,58 +144,10 @@ The reason behind it may be that the network card has been upgraded from 9GBS to
 % 数据分布和 selectivity
 
 
-
 put it together, we construct the operator's feature vector as 
 Figure xx shows the structure of few sample operator's feature vector. 
 It consists of two segments: the operator encoding and the hardware resources (the right green). 
 The following will introduce the meaning of these two segments.
-
-\subsection{From One-hot Encoding To Embedding}
-In mathmatic, an embedding is a function $f X -> Y$ that maps a data point X in one space to point Y in another space. 
-This is the most important preprocess technique in natural language processing (NLP), where the word embedding is a term used for the representation of words for text analysis. 
-It is typically in the form of a real-valued vector that encodes the meaning of the word such that the words that are closer in the vector space are expected to be similar in meaning [wiki]. 
-For promotion, there also are image embedding, video embedding. 
-A representative algorithm for generating word embedding is the CBOW[], whose main idea is that words appearing in the same sentence have higher relevance. 
-The way CBOW works, in a nutshell, is that it tends to maximize the joint probability of a word and its context words in a sentence. 
-Therefore, its training requires a large corpus containing enough sentences.
-
-We can share the same idea in the word embedding that allows semantically similar operators to have closer distance. 
-The objective function is the also the same when training the operator embedding, i.e. maximizing the joint probability of a operator and its neighbor operators in a logical plan, therefore we can still use the CBOW algorithm. 
-We take a logical plan as a "sentence", where each operator is a "word" and the "context words" are the remaining operators in the logical plan. 
-All we need to do is provide a number of logical plans as the corpus. 
-Fortunately, we already have a large number of synthetic logical plans. 
-The resulting embeddings are shown in Figure xx. 
-For the sake of visualization, we just show the top-2 dimensions with the highest eigenvalue. 
-One observation is that operators that are the same computing paradigm and have the same number of inputs and outputs tend to have small cosine distance. 
-What's more, the newly inserted Flatmap operator is mapped closer to the Map operator instead of the Matmul operator which is probably due to the same reason. 
-In another word, the operator embedding now has some semantic meanings.
-
-After replacing the one-hot encoding to the operator embedding, we overcome the above two problem: 
-\begin{itemize}
-    \item 1) The operator embedding is low-dimensional and dense compare to the one-hot encoding, which means more computational. 
-    As shown in Figure xx, the classification accuracy increased significantly especially for the large graph. 
-    \item 2) It's now compatible to a newly integrated operator. 
-    Figure xx outlines the embedding structure of both the old and new operator. 
-    It can be seen that, both the two types of operator have the same dimension and are in the same euclidean space, therefore the new operator not only does not cause dimensional changes and ultimately invalidate the model, but because the embedding represents a certain semantic relationship, the model can make the inference for it directly using the existing knowledge. 
-\end{itemize}
-
-There are two scenario for getting the embedding of a new operator:
-\begin{itemize}
-    \item 1) The operator is new to CLIC but not the model, therefore its embedding can be retreived in CLIC directly from the model.
-    \item 2) The operator is also new to the model, i.e. the "OOV" (out of vocabulary) problem. 
-    In this case, the model needs some new training data to recognize it. 
-    Therefore, we synthesize some new logical plan that contains the operator according to operator's attributes and then incrementally updates the model to generate the embedding.
-\end{itemize}
-
-Apart from the above operator embedding, we also design and generate the embedding for each physical computing platform. 
-The main motivation for this is the compatibility: a newly supported platform will increase the number of categories to predict which will also invalidate the model. 
-But with the platform embedding, we can change the classification policy from "selecting the one with highest probability" to "selecting the closest one to the resulting embedding". 
-The mathmatical meaning and generation method goes the same. 
-The only difference is that instead of treating the operator as the "word", we treat each platform that supports the operator as the "word". 
-The resulting Platform Embedding is shown in Figure XX.
-
-Last but not the least, it's important to emphasize that both the operator and platform embedding techniques are not neccessarily bound with CLIC but a general feature extraction method. 
-One can generate an operator embedding whether the operator is supported by CLIC or not as long as there are logical plans that contain this operator.
 
 
 \subsection{GCN Intuition}
