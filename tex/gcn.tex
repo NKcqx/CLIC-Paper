@@ -3,20 +3,28 @@
 
 
 In CLIC, a logical plan is organized in the form of DAG where the node denotes the logical operator and the edge denotes the operator dependency.
-The platform selection is to find the best platform for each logical operator in a logical plan to achive the best overall performance.
-We take the best platform as the label of the node, in this way, the selection problem is actually a typical node classification problem.
-Such problems with topology as input are usually solved with the Graph Nerual Network(GNN) that can be directly applied to the graph.. 
-Among many GNNs, GCN is considered better at solving the node classification problem because of its ability of the convolution kernel to capture neighbor relationships.
-Compared with the ML-based approach, GCN avoids the loss of structural information due to the need to encode the topological structure as a vector[];
-One more step before feeding the logical plan into GCN is to vectorize the operator, i.e. the feature extraction step.
-However, as we have disscussed in 2.2, the traditional vectorization method is not suitable for CLIC. 
-Inspired by the word embedding, we propose a novel feature extraction method called the operator embedding and overcome the problem for the first time.
+% 先说 opt 有很多平台可用，但存在一个最好的平台，部署到上面可以让plan全局性能最佳。
+% 给定一个plan和xx，我们把每个运算符最好的平台看作它的 label。
+% 而同一运算符的label不是固定的，而是因 workload, hardware resources 而变化的。
+% 因此我们的任务就是根据 xx 的变化，找到运算符的 label 
+The platform selection is to find the best platform for each logical operator in a logical plan to achieve the best overall performance.
+We take the best platform as the label of the node, i.e. operator, in this way, the selection problem is actually a typical node classification problem.
+
+% 下面这句分两句。第二句先说 GNN 是什么，再说它能直接应用到 topology 上
+Such problems with topology as input are usually solved with the Graph Nerual Network(GNN) that can be directly applied to the graph.
+Among many GNNs, GCN is considered better at solving the node classification problem because of its ability of capturing neighbor relationships with the convolution kernel.
+Compared with the ML-based approach, GCN avoids the loss of structural information due to the need of encoding the topological structure as a vector[];
+One more step before feeding the logical plan into GCN is to vectorize the operator, i.e transform the operator object into a numerical vector.
+However, as we have disscussed in Section 2.2, the traditional vectorization method is not suitable for CLIC. 
+% those drawbacks ? 第二章要不要说呢？说了的话这能直接用 the、those 吗？
+Inspired by the word embedding[], we propose a novel feature extraction method called the operator embedding and overcome those drawbacks for the first time.
 In 5.1, we give a first look to the the naive encoding approach and discuss its limitations, and then we introduce our novel embedding-based encoding.
 In 5.2, we detailed the process of using GCN to select platforms through an example.
 In 5.3, we introduce the method of synthesizing training data of the operator embedding and the GCN.
 
 \subsection{Feature Extraction}
 As it turns out, many Machine Learning algorithms and almost all Deep Learning Architectures are incapable of processing raw form data like plain text or, in this case, the logical operator. 
+% 简单点，说话的方式简单点
 They require numbers as inputs to perform any sort of job, be it classification, regression etc. in broad terms. 
 Therefore, the operator needs to be encoded as the feature vector before fed into GCN.
 
@@ -24,10 +32,10 @@ When encoding the operator, we consider the following three most influential fac
 
 \subsubsection{Operator Encoding}
 Operators describe the computation logic of the workflow.
-Two logical plans with the same topology can be different because of their own operators.
+Two logical plans with the same topology can be different because the consisted operators are from two domains.
 As examplified in Figure \ref{fig:graph-comparison}, although both of the two plans have the same topology,
 \ref{fig:same-graph-sql} describes a SQL query while \ref{fig:same-graph-linear} is a mathmatical calculation.
-As a result, they need to be classified to the different execution engines.
+As a result, they need to be classified to the different execution engines, such as Postgre for Figure \ref{fig:same-graph-sql} and Tensorflow for the other.
 
 \begin{figure}
   \subfigure[SQL Query]{
@@ -70,7 +78,7 @@ However, it has two prominent limitations that are especially obvious in CLIC:
   The dimension of the one-hot vector is equal to the category amounts and only has one non-zero element.
   Therefore it usually resulted in a high-dimensional and sparse vector. 
   Generally speaking, this makes it less computational since the majority of neural network toolkits do not play well with very high-dimensional, sparse vectors [Neural Network Methods in Natural Language Processing, 2017]. 
-  This problem becomes more crucial to a cross-platform framework like CLIC since we already face the insufficiant data problem for a long time.
+  This problem becomes more crucial to a cross-platform framework like CLIC since we already face the insufficiant training data problem for a long time.
   \item 2) Imcompatible to new operator insertion: 
   In particular, as a new operator been integrated, the dimension of the one-hot vector will grow in the same time. 
   Figure \ref{fig:feature-vector-onehot} examplified this situation. 
@@ -91,23 +99,40 @@ It is typically in the form of a real-valued vector that encodes the meaning of 
 For promotion, there also are image embedding, video embedding. 
 A representative algorithm for generating word embedding is the CBOW[], whose idea is that words appearing in the same sentence have higher relevance. 
 The way CBOW works, in a nutshell, is that it tends to maximize the joint probability of a word and its context words in a sentence. 
-Therefore, it requires a large corpus containing enough sentences as the training dateset to learn the word relationships.
+Generating the word embedding using CBOW requires a large corpus containing enough sentences as the training dateset to learn the word relationships.
 
-% 在CLIC中，出现在一个 logical plan 中的运算符也具有一定的相似性和关联。
-% 举例来说，线性代数会先 load 数据，然后用 locator 选择数据，然后计算，最后是保存数据。
-% 而计算符按输入数据个数分类又有一元运算符如 sin, cos, exp， 和二元运算符如 add, multiply
-Therefore, we can share the same idea in the word embedding that 
-1) allows semantically similar operators to have closer distance. 
-2) maximizes the joint probability of a operator and its neighbor operators in a logical plan
-We can still use the CBOW algorithm.
-We take the topological ordered logical plan as the "sentence", where each operator is a "word" and its neighbors are the "context words". 
+Back to CLIC, we believe that operators also have semantical meanings and are associated to each other.
+The semantical meanings, for example, include computing paradigm, \#input/output, etc.
+Based on these similarities, we design the operator embedding.
 
-The corpus i.e. logical plans, are retreived from our synthesized dataset which will be discussed later in Section xx.
-The structure of the operator embedding is shown in Figure \ref{fig:feature-vector-embedding}. 
-The dimension of the operator embedding is fixed (hyper parameter) and way smaller than that of the one-hot encoding.
-The resulting embeddings trained using our synthesized dataset are visualized in Figure \ref{fig:emb_visual} where we reduce the dimension to the top-2 dimensions with the highest eigenvalue for the sake of visualization. 
-A quick observation is that operators that belong to the same computing paradigm and have the same number of inputs/outputs tend to have closer cosine distance. 
-In another word, we successfully encode the semantical relationship to the low-dimensional operator embedding.
+As illustrated in Figure \ref{fig:feature-vector-embedding}, 
+the operator embedding is a real-valued continuous vector whose dimension is fixed (hyper parameter) and usually rather smaller than that of the one-hot encoding.
+It has two key characteristics that overcome the limitations of the one-hot encoding:
+\begin{itemize}
+  \item 1) Low-dimensional and Dense. 
+  Compare to one-hot encoding's high-dimensional 0-1 vector, 
+  the operator embedding is encoded with real-world meanings and therefore only a low-dimensional vector is required to represent an operator.
+  This makes it more computational for the following models, and in the meantime, saves a lot of training data.
+  \item 2) Compatible to operator evolution. The embedding's dimensions will not grow with the insertion of new operators. 
+  As we can see from Figure \ref{fig:feature-vector-embedding}, the newly integrated \textit{tan} operator has consistent dimension with the others.
+  The model that takes it as input data does not need to be retrained anymore. 
+  This largely supports the fast evolution of CLIC.
+\end{itemize}
+
+To generate the operator embedding, we adopt the same ideas in the word embedding that
+1) allowing semantically similar operators to have closer (cosine) distance, 
+and 2) maximizing the joint probability of an operator and its neighbour operators in a logical plan.
+Therefore, we can still use the CBOW algorithm.
+We consider the topological ordered logical plan as the "sentence", where each operator is a "word" and its neighbors are the "context words". 
+The corpus, i.e. logical plan dataset, are retreived from our synthesized dataset which will be discussed later in Section xx.
+Using this corpus as dataset, we finally have the trained operator embeddings visualized in Figure \ref{fig:emb_visual}.
+We reduce the dimension to the top-2 dimensions with the highest eigenvalue for the sake of visualization.
+The observation is that the operator \textit{tan} is closer to \textit{sin} and far from \textit{union}.
+This can be explained semantically as that \textit{tan} and \textit{sin} belong to the same computing paradigm and have the same \#inputs/outputs.
+Although the meanings of the embedding are more complex than just paradigm and parameter amounts, 
+for CLIC, 
+we can simply assume that the operator embedding has successfully portrays the operator.
+The power of the embedding will further be revealed when utilizing to train the GCN model, which we will disscuss in Chapter xx.
 
 \begin{figure}[tbh]
   \centering
@@ -116,16 +141,17 @@ In another word, we successfully encode the semantical relationship to the low-d
   \label{fig:emb_visual}
 \end{figure}
 
-Since the input operators are only logical, 
-one can generating a operator's embedding whether it is implemented by a framework, say CLIC, or not, 
-as long as they offer enough logical plans that contain the operator.
-Therefore, one important merit we want to emphasize is that, the operator embedding technique is a general feature extraction method that is independent to any computing frameworks.
+One thing we want emphasize is that, 
+since the operator used as the input of embedding is only logical,
+one can generating an operator's embedding whether it is actually implemented by a framework, say CLIC, or not, 
+as long as the corpus they offered contains the operator.
+In another word, the operator embedding technique is a general encoding method that is independent to any computing frameworks.
 
-What this means to CLIC is that, we can construct a rich operator embedding set as a "dictionary" before we actually implement them.
-Every time we integrate a new operator, we look up to the dictionary for its embedding. There are two scenario for getting the embedding:
+What this merit means to CLIC is that, we can construct a rich operator embedding set as the "dictionary" before we actually implement them.
+After that, every time we integrate a new operator, we look up to the dictionary for its embedding. There are two scenario for getting the embedding:
 \begin{itemize}
-    \item 1) The operator is new to CLIC but not the dictionary. We retreive its embedding directly from the dictionary.
-    \item 2) The operator is "Out-Of-Vocabulary (OOV)". In this case, we need to first synthesize some new logical plans for it according to its attributes (paradigm, \#input/output, etc.), and then retrain all of the embeddings.
+    \item 1) The operator is new to CLIC but not the dictionary. In this case, we retreive its embedding directly from the dictionary.
+    \item 2) The operator is "Out-Of-Vocabulary (OOV)". In this case, we need to first synthesize some new logical plans that contain this operator according to its attributes (paradigm, \#input/output, etc.), and then re-generating all of the embeddings.
 \end{itemize}
 
 
