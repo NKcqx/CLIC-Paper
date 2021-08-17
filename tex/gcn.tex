@@ -24,10 +24,17 @@ In 5.1, we give a first look to the the naive encoding approach and discuss its 
 In 5.2, we detailed the process of using GCN to select platforms through an example.
 In 5.3, we introduce the method of synthesizing training data of the operator embedding and the GCN.
 
-\subsection{Feature Extraction}
-As it turns out, many Machine Learning algorithms and almost all Deep Learning Architectures are incapable of processing raw form data like plain text or, in this case, the operator object. 
-They require numbers as inputs to perform jobs like classification, regression etc. in broad terms. 
-Therefore, the operator needs to be encoded as the numerical vector before fed into GCN.
+% <<<<<<< Updated upstream
+% \subsection{Feature Extraction}
+% As it turns out, many Machine Learning algorithms and almost all Deep Learning Architectures are incapable of processing raw form data like plain text or, in this case, the operator object. 
+% They require numbers as inputs to perform jobs like classification, regression etc. in broad terms. 
+% Therefore, the operator needs to be encoded as the numerical vector before fed into GCN.
+% =======
+The platform selection is to find the platform with the lowest cost for each logical operator in a logical plan. 
+We take this problem as a node classification problem, where the platform of the lowest cost is considered as the label of the logical operator. 
+We introduce the GCN as the classifier along with a novel feature extraction method that can react to changes in the workflow topology, workload, and hardware environment.
+Below we first narrate the feature extraction method used in CLIC and then describe the classification method using GCN.
+% >>>>>>> Stashed changes
 
 When designing the feature vector, we consider the following three most influential factors: the operator itself, hardware, and workload.
 
