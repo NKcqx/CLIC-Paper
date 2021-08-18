@@ -9,18 +9,13 @@ The platform evaluation and selection process that originally required user expe
 \textbf{Programming Interface} 
 CLIC adopts the dataflow programming patterns [tensorflow, spark, flink] to facilitate the development of workflows. 
 At a higher level, CLIC implements a client program that describes the high-level control flow of the task as a DAG, which relies on two main programming abstractions:
-1) structures to describe the data, i.e. the data model and 2) parallel operations on these data.
-
-The Operations include the logical operator and flow controller. 
-A logical operator represents a basic computational task such as data filtering or a K-Nearest-Neighbor(KNN) algorithm.
+1) structures to describe the data, i.e. the data model and 2) parallel operations on these data, i.e. logical operators.
+A logical operators represents a basic computational task such as data filtering or a K-Nearest-Neighbor(KNN) algorithm.
 It is platform-independent and only describe the computational semantics like functionality, parameter list, input/output data format.
-The implementation of a logical operator on a speicific platform is called as a physical operator.
-There is a 1-N (N $\ge$ 1) mapping between a logical operator and physical operators, which means a logical operator can be implemented on multiple data processing platform.
-A logical operator need to be transformed to a physical operator for execution, which will be discussed later.
+In this way, users only need to care about the business logic to build workflow.
+The logical operator will be transformed to a physical operator automatically by CLIC.
 
-Since a real world workflow usually contains conditional branch (if-else clause) and iterations (while loop)
-and the executing direction are determined dynamically[tensorflow, lara, rheem], 
-we introduce the flow controller such as SWITCH, NEXT-ITERATION to control the running direction of the workflow. 
+
 
 % 下面这两段放到 第四章系统设计里面说
 % With a hardware-conscious GCN platform selection algorithm that optimizes overall workflow efficiency, each logical operator in a workflow is assigned with a data processing platform and becomes a physical operator.
@@ -35,7 +30,7 @@ we introduce the flow controller such as SWITCH, NEXT-ITERATION to control the r
 Although a logical operator can have multiple available physical operators, there exists a best one, transforming to which can lead to the best overall performance. 
 CLIC formulates the selection as a classification problem and takes the input workflow as a graph, 
 where Graphic Convolutional Network (GCN) is adopted for evaluation and selection. 
-For the flexibility of expanding the fast growing platforms, the GCN model is made adaptive to new platforms without retraining the model.
+For the flexibility of expanding the fast growing platforms, a feature extraction technique is applied to made the GCN adaptive to new platforms without retraining the model.
 The details will be disscussed later in Section 4.3 and Section 5.
 
 \textbf{Cloud-Native Architecture} 
